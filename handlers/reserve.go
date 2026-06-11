@@ -131,20 +131,14 @@ func (h *ReserveHandler) CancelReserve(c *gin.Context) {
 		return
 	}
 
+	wasAvailable := reserve.Status == models.ReserveStatusAvailable
 	reserve.Status = models.ReserveStatusCancelled
 	h.store.UpdateReserveRecord(reserve)
 
-	bookID := reserve.BookID
-	if reserve.Status == models.ReserveStatusAvailable {
-		next, ok := h.store.GetFirstWaitingReserve(bookID)
+	if wasAvailable {
+		next, ok := h.store.GetFirstWaitingReserve(reserve.BookID)
 		if ok {
-			now := time.Now()
-			expireDate := now.AddDate(0, 0, 3)
-			next.Status = models.ReserveStatusAvailable
-			next.AvailableDate = &now
-			next.ExpireDate = &expireDate
-			next.IsNotified = true
-			h.store.UpdateReserveRecord(next)
+			h.store.NotifyNextReserveDirect(reserve.BookID, next)
 		}
 	}
 

@@ -77,6 +77,7 @@ func (s *Store) PayReaderFines(readerID string, amount float64) (float64, []*mod
 
 	paid := make([]*models.FineRecord, 0)
 	remaining := amount
+	var paidTotal float64
 
 	for _, fine := range unpaid {
 		if remaining <= 0 {
@@ -88,12 +89,16 @@ func (s *Store) PayReaderFines(readerID string, amount float64) (float64, []*mod
 			fine.PaidDate = &now
 			s.UpdateFineRecord(fine)
 			remaining -= fine.Amount
+			paidTotal += fine.Amount
 			paid = append(paid, fine)
 		} else {
-			break
+			fine.Amount -= remaining
+			paidTotal += remaining
+			remaining = 0
+			s.UpdateFineRecord(fine)
+			paid = append(paid, fine)
 		}
 	}
 
-	paidAmount := amount - remaining
-	return paidAmount, paid
+	return paidTotal, paid
 }

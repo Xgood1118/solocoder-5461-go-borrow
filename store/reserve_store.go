@@ -130,6 +130,11 @@ func (s *Store) NotifyNextReserve(bookID string) (*models.ReserveRecord, bool) {
 	if !ok {
 		return nil, false
 	}
+	s.NotifyNextReserveDirect(bookID, next)
+	return next, true
+}
+
+func (s *Store) NotifyNextReserveDirect(bookID string, next *models.ReserveRecord) {
 	now := time.Now()
 	expireDate := now.AddDate(0, 0, 3)
 	next.Status = models.ReserveStatusAvailable
@@ -137,5 +142,5 @@ func (s *Store) NotifyNextReserve(bookID string) (*models.ReserveRecord, bool) {
 	next.ExpireDate = &expireDate
 	next.IsNotified = true
 	s.UpdateReserveRecord(next)
-	return next, true
+	s.updateReserveQueuePositions(bookID)
 }

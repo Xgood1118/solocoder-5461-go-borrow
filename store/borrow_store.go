@@ -1,6 +1,7 @@
 package store
 
 import (
+	"math"
 	"time"
 
 	"library-borrow-system/models"
@@ -68,7 +69,7 @@ func (s *Store) CalculateOverdue(record *models.BorrowRecord) (int, float64) {
 	if now.Before(record.DueDate) {
 		return 0, 0
 	}
-	days := int(now.Sub(record.DueDate).Hours() / 24)
+	days := int(math.Ceil(now.Sub(record.DueDate).Hours() / 24))
 	if days <= 0 {
 		return 0, 0
 	}
