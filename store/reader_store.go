@@ -1,6 +1,7 @@
 package store
 
 import (
+	"errors"
 	"time"
 
 	"library-borrow-system/models"
@@ -52,6 +53,99 @@ func (s *Store) DeleteReader(id string) bool {
 	s.Readers.Delete(id)
 	s.readerByCardNo.Delete(reader.CardNo)
 	return true
+}
+
+type DeleteReaderResult struct {
+	Success          bool
+	Message          string
+	UnreturnedBooks  []*models.Book
+	UnpaidFineAmount float64
+	CancelledReserves int
+}
+
+func (s *Store) DeleteReaderWithCascade(id string) (*DeleteReaderResult, error) {
+	reader, ok := s.GetReader(id)
+	if !ok {
+		return nil, errors.New("读者不存在")
+	}
+
+	result := &DeleteReaderResult{}
+
+	activeBorrows := s.GetReaderActiveBorrowRecords(id)
+	if len(activeBorrows) > 0 {
+		unreturnedBooks := make([]*models.Book, 0, len(activeBorrows))
+		for _, br := range activeBorrows {
+			if book, bookOk := s.GetBook(br.BookID); bookOk {
+				unreturnedBooks = append(unreturnedBooks, book)
+			}
+		}
+		result.UnreturnedBooks = unreturnedBooks
+		result.Message = "存在未归还的图书，无法删除"
+		result.Success = false
+		return result, errors.New(result.Message)
+	}
+
+	unpaidFine := s.GetReaderUnpaidFine(id)
+	if unpaidFine > 0 {
+		result.UnpaidFineAmount = unpaidFine
+		result.Message = "存在未结清的罚款，无法删除"
+		result.Success = false
+		return result, errors.New(result.Message)
+	}
+
+	activeReserves := s.GetReaderReserveRecords(id)
+	cancelledCount := 0
+	for _, r := range activeReserves {
+		if r.Status == models.ReserveStatusWaiting || r.Status == models.ReserveStatusAvailable {
+			wasAvailable := r.Status == models.ReserveStatusAvailable
+			r.Status = models.ReserveStatusCancelled
+			s.UpdateReserveRecord(r)
+			cancelledCount++
+
+			bookID := r.BookID
+			if wasAvailable {
+				s.NotifyNextReserve(bookID)
+			}
+			s.updateReserveQueuePositions(bookID)
+		}
+	}
+	result.CancelledReserves = cancelledCount
+
+	if s.IsBlacklisted(id) {
+		s.RemoveFromBlacklist(id)
+	}
+
+	borrowRecords := s.GetReaderBorrowRecords(id)
+	for _, br := range borrowRecords {
+		s.BorrowRecords.Delete(br.ID)
+		removeFromSliceMap(&s.borrowByBookID, br.BookID, br.ID, func(v interface{}) string {
+			return v.(*models.BorrowRecord).ID
+		})
+	}
+	deleteKeyFromSliceMap(&s.borrowByReaderID, id)
+
+	for _, r := range activeReserves {
+		s.ReserveRecords.Delete(r.ID)
+		removeFromSliceMap(&s.reserveByBookID, r.BookID, r.ID, func(v interface{}) string {
+			return v.(*models.ReserveRecord).ID
+		})
+	}
+	deleteKeyFromSliceMap(&s.reserveByReaderID, id)
+
+	fineRecords := s.GetReaderFineRecords(id)
+	for _, fr := range fineRecords {
+		s.FineRecords.Delete(fr.ID)
+	}
+	deleteKeyFromSliceMap(&s.fineByReaderID, id)
+
+	s.Blacklist.Delete("bl_" + id)
+
+	s.Readers.Delete(id)
+	s.readerByCardNo.Delete(reader.CardNo)
+
+	result.Success = true
+	result.Message = "删除成功"
+	return result, nil
 }
 
 func (s *Store) GetReaderBorrowCount(readerID string) int {

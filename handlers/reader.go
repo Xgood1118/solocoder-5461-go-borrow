@@ -100,11 +100,23 @@ func (h *ReaderHandler) UpdateReader(c *gin.Context) {
 
 func (h *ReaderHandler) DeleteReader(c *gin.Context) {
 	id := c.Param("id")
-	if !h.store.DeleteReader(id) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "读者不存在"})
+	result, err := h.store.DeleteReaderWithCascade(id)
+	if err != nil {
+		if result != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":              err.Error(),
+				"unreturned_books":   result.UnreturnedBooks,
+				"unpaid_fine_amount": result.UnpaidFineAmount,
+			})
+			return
+		}
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
+	c.JSON(http.StatusOK, gin.H{
+		"message":            result.Message,
+		"cancelled_reserves": result.CancelledReserves,
+	})
 }
 
 func (h *ReaderHandler) GetReaderPrivileges(c *gin.Context) {

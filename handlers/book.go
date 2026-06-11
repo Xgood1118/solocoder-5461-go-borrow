@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"library-borrow-system/models"
@@ -132,6 +133,14 @@ func (h *BookHandler) MarkBookLost(c *gin.Context) {
 	h.store.UpdateBookStatus(id, models.BookStatusLost)
 
 	if borrowRecord, ok := h.store.GetActiveBorrowByBookID(id); ok {
+		now := time.Now()
+		borrowRecord.ReturnDate = &now
+		borrowRecord.IsOverdue = false
+		borrowRecord.OverdueDays = 0
+		borrowRecord.FineAmount = compensation
+		borrowRecord.IsFinePaid = false
+		h.store.UpdateBorrowRecord(borrowRecord)
+
 		fineRecord := &models.FineRecord{
 			ID:          utils.GenerateFineID(),
 			ReaderID:    borrowRecord.ReaderID,

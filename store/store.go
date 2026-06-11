@@ -74,6 +74,10 @@ func getSliceFromMap(m *sync.Map, key string) []interface{} {
 	return nil
 }
 
+func deleteKeyFromSliceMap(m *sync.Map, key string) {
+	m.Delete(key)
+}
+
 func (s *Store) GetAllReaders() []*models.Reader {
 	var readers []*models.Reader
 	s.Readers.Range(func(key, value interface{}) bool {
